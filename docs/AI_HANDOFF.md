@@ -1,5 +1,24 @@
 # AI handoff — HackAlem Logistics
 
+## Актуально: FORECAST-CORE-20260923
+
+- Read-only CLI-срез реализован: D — data/тесты, M — forecast/backtest/тесты, I — `smartbuyer/cli.py`, `tests/test_cli.py`, requirements/.gitignore/README/docs. На выданных источниках общий прогон дал 44 passed без skips; ожидается приёмка ведущим.
+- Текущий контракт: [TECH_SPEC.md](TECH_SPEC.md), задачи: [ROADMAP.md](ROADMAP.md). Они отменяют прежние самодельные бизнес-fixtures/DEMO-001: только выданные 12 XLSX, unknown не0; чужие исходники не меняются.
+- Настоящий Fable через `Provider=claude`, `Model=fable`, `Role=audit` ответил: прогнозное ядро технически целесообразно; весь кейс/точный заказ не доказаны при отсутствии нужных входов. Нет подмены консультации внутренним агентом.
+- Единственный интегратор владеет app/cli/API-тестами, plain-dict контрактом, зависимостями, `.gitignore`, README/docs; UI позже в `web/**`. Backend не ждёт Stitch. Статусы ранних задач ниже — история, не текущая готовность.
+- Задача записи этих двух документов не выполняла code/commit/push/merge/deploy; изменения памяти ограничены этой актуализацией.
+
+### CLI-INTEGRATION-20260923
+
+- Реализовано: stdout-only UTF-8 JSON/CSV из единого report, обе модели и backtest шести полных месяцев, source/date/unit, provisional forecast и blocked/null заказ; as_of позже даты источника запрещён.
+- Проверки: `py -m py_compile smartbuyer/cli.py tests/test_cli.py`; CLI-only 13 passed; общий `py -m pytest tests/test_data.py tests/test_forecast.py tests/test_cli.py -q` → 44 passed in 7.99s, без skips.
+- Полный прогон: 12 источников, 3045 позиций, 758 provisional и 2287 blocked прогнозов, 3331 сопоставимая SKU×месяц точка; нет общего MAE смешанных единиц. Заказы все blocked, точных дат дефицита нет.
+- Независимо проверена арифметика выбранного SKU и JSON→CSV равенство; на нём сезонная модель хуже простого среднего по MAE, улучшение не объявлено.
+- Исследовательские counts сравнения MAE: при ≥3 общих периодах 560 SKU (seasonal лучше157, mean403, ties0); при 6/6 —493 (seasonal136, mean357, ties0). Это сравнение на тех же периодах, не out-of-sample качество уже выбранной модели; автоматического переключения нет.
+- Независимый QA ведущего подтвердил 44 passed/0 skips; замечание о потере stock.status в CSV исправлено добавлением stock_status и проверки равенства JSON/CSV. Объяснение теперь округляет только текст и пишет «нет данных» вместо None.
+- Ponytail: один CLI, stdlib, только уже имеющиеся openpyxl/pytest, без файлового writer/API/UI/БД. Собственный review на усложнение: лишних слоёв нет; независимая приёмка CLI остаётся за ведущим.
+- Исходники не менялись/не копировались в Git, commit/push/merge/deploy не выполнялись.
+
 ## LOGISTICS-PLAN-20260923
 
 - Дата: 2026-09-23, Asia/Qyzylorda.
