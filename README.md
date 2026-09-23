@@ -10,3 +10,5 @@ Hackathon team repository for PlanP
 [Текущее состояние](docs/PROJECT_STATE.md) · [Передача задачи](docs/AI_HANDOFF.md) · [Журнал](docs/CHANGELOG_AI.md).
 
 Для дизайна в Stitch: [бриф интерфейса](docs/STITCH_DESIGN_BRIEF.md) и [короткий prompt](docs/STITCH_PROMPT.txt). Это задание дизайнеру, не готовое веб-приложение.
+
+[План исполнения до дедлайна](docs/IMPLEMENTATION_PLAN.md): этапы, контракты параллельной работы и критерии приёмки. Код — после отдельной команды владельца.
