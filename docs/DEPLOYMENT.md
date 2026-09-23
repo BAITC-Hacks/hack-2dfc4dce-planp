@@ -1,6 +1,17 @@
 # QORAI — управление запасами: запуск на Python-хостинге
 
-Этот пакет готовит запуск существующего MVP; публикация ещё не выполнена, хостинг настраивает владелец. Для native Python закреплена ветка3.13 в `.python-version` (локально проверена3.13.14); Docker-сборка пока не проверена. Нужен один процесс приложения и ровно выданные Excel. Математика, исходные данные и интерфейс остаются прежними.
+Демо опубликовано: **[https://qorai.onrender.com](https://qorai.onrender.com)**. 23.09.2026 Render подтвердил `Deploy succeeded | Live` для конкурсного main`53aae44e651695ea289c5215032348a68dc935be`. Для native Python закреплена ветка3.13 в `.python-version`; Docker-сборка пока не проверена. Работает один процесс приложения и ровно выданные Excel. Более поздние изменения не считаются опубликованными без отдельной синхронизации и проверки.
+
+## Фактическая публикация Render Free
+
+- Приватная deployment-копия: `emilkuzhantaev-coder/qorai-deploy`, ветка`main`. Основная сдача остаётся в`BAITC-Hacks/hack-2dfc4dce-planp`; её origin не заменён.
+- Сервис`qorai`: Python3, Oregon, Free$0/месяц,0.1CPU/512MB. Платные ресурсы, база данных и диск не подключены.
+- Build: `python -m pip install -r requirements.txt && python scripts/bootstrap_data.py --output-dir data/issued`.
+- Environment: `HACKALEM_DATA_DIR=data/issued`; Health Check Path: `/api/health`; `PORT` задаёт Render.
+- Start: `HACKALEM_ALLOWED_HOSTS="$RENDER_EXTERNAL_HOSTNAME" HACKALEM_PUBLIC_ORIGIN="$RENDER_EXTERNAL_URL" HACKALEM_BIND_HOST=0.0.0.0 python -m smartbuyer.serve`. Официальные переменные [Render](https://render.com/docs/environment-variables) дают точный назначенный домен/HTTPS origin, wildcard не используется. Для этого сервиса они соответствуют`qorai.onrender.com` и`https://qorai.onrender.com`.
+- Проверено извне: `/api/bootstrap` вернул3045 товаров,12 источников,`as_of=2026-09-22`; браузер отрисовал QORAI и историю. В журнале сборки — проверка SHA256 всех12 XLSX.
+- Remote smoke: для исходного`ATN540126` с явно техническими настройками L2/H30/SS7/MOQ0, двумя подтверждениями режима и ETA существующей партии08.10.2026 получено Q36, статус`provisional`, метод`mean_12`; CSV200 содержит ровно ту же строку/количество и`reported_not_confirmed`. Это проверка транспорта и воспроизводимости сценария, не подтверждение политики компании.
+- Free может засыпать, первый запрос после простоя медленнее; рестарт теряет результаты в памяти. Авторизации нет, поэтому демо содержит только публичный набор организатора, не закрытые данные.
 
 ## Данные перед запуском
 
@@ -44,7 +55,7 @@ python -m smartbuyer.serve
 
 ## Render Free
 
-Подготовлены инструкции для Render Free Web Service с Python; это не выполненная публикация и не решение за владельца о хостинге. PostgreSQL не нужен: MVP читает выданные XLSX, а результаты расчётов держит в памяти. Порядок запуска основан на официальных инструкциях [Render для FastAPI](https://render.com/docs/deploy-fastapi) и [ограничениях Free](https://render.com/docs/free).
+Ниже — воспроизводимые настройки Render Free Web Service с Python; фактическая публикация и проверенный адрес описаны выше. PostgreSQL не нужен: MVP читает выданные XLSX, а результаты расчётов держит в памяти. Порядок запуска основан на официальных инструкциях [Render для FastAPI](https://render.com/docs/deploy-fastapi) и [ограничениях Free](https://render.com/docs/free).
 
 1. Создайте Web Service для этого репозитория; `.python-version` закрепляет Python3.13. Тариф/домен выбирает владелец.
 2. Build Command: `python -m pip install -r requirements.txt && python scripts/bootstrap_data.py --output-dir data/issued`. Start Command: `python -m smartbuyer.serve`.
@@ -85,4 +96,4 @@ docker run --rm --name qorai \
 
 Запускайте ровно один worker и одну реплику. Снимок Excel и рассчитанные `result_id` хранятся в памяти процесса: рестарт и успешный reload их сбрасывают. Несколько реплик или workers потребовали бы общего хранилища, которого в этом MVP нет. Размер памяти и время первоначального чтения проверьте на выбранном тарифе с фактическими 12 файлами.
 
-Подготовка не включает выполненный Docker build или публикацию; результаты доступных локальных проверок сообщает исполнитель отдельно.
+Native Python-публикация проверена выше. Docker build по-прежнему не выполнен; локальные проверки и публичный smoke не доказывают производственную отказоустойчивость.

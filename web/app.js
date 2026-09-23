@@ -2,7 +2,7 @@
    Request gates, null-safe fields and result-ID export adapted from Claude Opus's packet draft. */
 'use strict';
 const $ = (id) => document.getElementById(id);
-const state = { bootstrap: null, key: null, item: null, report: null, plan: null, drafts: new Map(), tab: 'today', chart: null };
+const state = { bootstrap: null, key: null, item: null, report: null, plan: null, drafts: new Map(), tab: 'catalog', chart: null, catalogPage: 1 };
 const numberFormat = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
 const fmt = (value) => typeof value === 'number' && Number.isFinite(value) ? numberFormat.format(value) : 'Нет данных';
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -27,24 +27,57 @@ async function json(path, options) { return (await request(path, options)).json(
 function table(headers, rows, classes = []) {
   return `<table><thead><tr>${headers.map((x) => `<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${rows.map((r, i) => `<tr class="${classes[i] || ''}">${r.map((v) => `<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
 }
-function showTab(tab) {
+function showTab(tab, scroll = true) {
+  if (['today','parameters','recommendations'].includes(tab) && !state.key && !(tab === 'recommendations' && state.drafts.size)) {
+    tab = 'catalog'; message('Сначала выберите товар: нажмите на его артикул в таблице.');
+  }
   state.tab = tab;
   document.querySelectorAll('.page').forEach((el) => { el.hidden = el.id !== tab; });
   document.querySelectorAll('[data-tab]').forEach((el) => { if (el.dataset.tab === tab) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); });
+  $('item-picker').hidden = tab === 'catalog'; $('selection-meta').hidden = tab === 'catalog' || !state.key;
+  updateSteps();
   if (tab === 'today') requestAnimationFrame(drawChart);
+  if (scroll) window.scrollTo({top: 0, behavior: 'auto'});
+}
+function updateSteps() {
+  const current = !state.key ? 'step-item' : state.plan?.status === 'provisional' ? 'step-order' : 'step-policy';
+  for (const id of ['step-item','step-policy','step-order']) {
+    if (id === current) $(id).setAttribute('aria-current','step'); else $(id).removeAttribute('aria-current');
+  }
+}
+function catalogItems(items, supplier, query) {
+  const text = query.trim().toLocaleLowerCase('ru');
+  return items.filter((item) => (!supplier || item.supplier === supplier) && (!text || `${item.sku} ${item.name}`.toLocaleLowerCase('ru').includes(text)));
+}
+function catalogPage(items, page) {
+  const pages = Math.max(1, Math.ceil(items.length / 25)), current = Math.max(1, Math.min(page, pages));
+  return {rows:items.slice((current-1)*25,current*25),page:current,pages,total:items.length};
+}
+function filteredItems() { return catalogItems(state.bootstrap?.items || [], $('supplier').value, $('search').value); }
+function renderCatalog() {
+  const page = catalogPage(filteredItems(), state.catalogPage); state.catalogPage = page.page;
+  $('catalog-summary').textContent = `${state.bootstrap?.items.length || 0} товаров из выданных месячных отчётов. Срез ${dateText(state.bootstrap?.as_of)}. ${state.bootstrap?.sources?.length || 0} исходных файлов в наборе. По фильтру: ${page.total}.`;
+  const headers = ['Артикул','Наименование','Поставщик','Ед.','Отчётный остаток','Бронь','Свободно','Кратность','Данные'];
+  $('catalog-table').innerHTML = page.rows.length ? `<table class="catalog-table"><thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${page.rows.map((item) => {
+    const stock = item.stock || {}, missing = stock.free == null || item.unit == null || item.pack_multiple == null;
+    return `<tr><td><button type="button" class="catalog-sku" data-select-item="${esc(item.key)}" aria-label="Открыть товар ${esc(item.sku)}">${esc(item.sku)}</button></td><td>${esc(item.name || 'Название не указано')}</td><td>${esc(item.supplier)}</td><td>${esc(item.unit || 'Нет данных')}</td><td class="num">${esc(fmt(stock.reported))}</td><td class="num">${esc(fmt(stock.reserved))}</td><td class="num">${esc(fmt(stock.free))}</td><td class="num">${esc(fmt(item.pack_multiple))}</td><td><span class="badge ${missing ? 'warning' : ''}">${missing ? 'Есть пропуски' : 'Отчётный срез'}</span></td></tr>`;
+  }).join('')}</tbody></table>` : '<div class="empty-state">По этому фильтру товаров нет. Измените поставщика или поисковый запрос.</div>';
+  $('catalog-page').textContent = `Страница ${page.page} из ${page.pages} · ${page.total ? (page.page-1)*25+1 : 0}–${Math.min(page.page*25,page.total)} из ${page.total}`;
+  $('catalog-prev').disabled = page.page <= 1; $('catalog-next').disabled = page.page >= page.pages;
 }
 function selectedBrief() { return state.bootstrap?.items.find((item) => item.key === state.key); }
 function displaySelector(preferred = state.key) {
-  const supplier = $('supplier').value, query = $('search').value.trim().toLocaleLowerCase('ru');
-  const items = (state.bootstrap?.items || []).filter((item) => (!supplier || item.supplier === supplier) && (!query || `${item.sku} ${item.name}`.toLocaleLowerCase('ru').includes(query)));
+  const items = filteredItems();
   const fragment = document.createDocumentFragment();
+  const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Выберите товар в таблице'; fragment.appendChild(placeholder);
   for (const item of items) { const option = document.createElement('option'); option.value = item.key; option.textContent = `${item.sku} · ${item.name || 'Название не указано'}`; fragment.appendChild(option); }
   $('item-select').replaceChildren(fragment);
   $('item-count').textContent = `(${items.length})`;
-  const chosen = items.find((item) => item.key === preferred) || items.find((item) => item.stock?.free != null && item.pack_multiple != null && item.forecast_units != null) || items[0];
-  $('item-select').disabled = !chosen;
+  const chosen = items.find((item) => item.key === preferred);
+  $('item-select').disabled = !items.length;
   if (chosen) { $('item-select').value = chosen.key; if (chosen.key !== state.key || !state.item) selectItem(chosen.key); }
-  else { itemGate.cancel(); state.key = null; state.item = null; state.report = null; invalidatePlan(); renderItem(); }
+  else { itemGate.cancel(); state.key = null; state.item = null; state.report = null; invalidatePlan(); renderItem(); if (state.tab !== 'catalog') showTab('catalog', false); }
+  renderCatalog();
 }
 function invalidatePlan(removeDraft = false) {
   planGate.cancel(); state.plan = null; $('calculate').disabled = !state.item; $('form-status').textContent = 'Изменения требуют нового расчёта.';
@@ -52,6 +85,7 @@ function invalidatePlan(removeDraft = false) {
     renderDraft(); message('Параметры изменены: прежняя рекомендация этого товара удалена из черновика. Рассчитайте потребность заново.');
   }
   renderRecommendation(); renderOverview();
+  updateSteps();
 }
 async function selectItem(key) {
   state.key = key; state.item = null; state.report = null; invalidatePlan();
@@ -72,7 +106,7 @@ function resetPolicy(removeDraft = true) {
 }
 function renderItem() {
   const item = state.item;
-  if (!item) { $('selection-meta').textContent = state.key ? 'Данные товара пока недоступны.' : 'По этому фильтру товаров нет.'; $('calculate').disabled = true; $('forecast-export').disabled = true; renderOverview(); renderRecommendation(); return; }
+  if (!item) { $('selection-meta').textContent = state.key ? 'Данные товара пока недоступны.' : 'Выберите товар в таблице.'; $('calculate').disabled = true; $('forecast-export').disabled = true; renderOverview(); renderRecommendation(); return; }
   const stock = item.stock || {};
   $('selection-meta').innerHTML = `<strong>${esc(item.sku)}</strong> · ${esc(item.name)} &nbsp; / &nbsp; ${esc(item.supplier)} &nbsp; / &nbsp; Ед.: ${esc(item.unit || 'не подтверждена')} &nbsp; / &nbsp; Срез: ${esc(dateText(stock.as_of || state.bootstrap.as_of))}`;
   $('pack-value').textContent = item.pack_multiple == null ? 'Неизвестна' : `${fmt(item.pack_multiple)} ${item.unit || ''}`;
@@ -99,8 +133,8 @@ function renderOverview() {
   const lastValue = plan?.order?.quantity;
   $('metrics').innerHTML = metric('Отчётный остаток', stock.reported, 'Не подтверждение приёмки в реальном времени') + metric('Отчётная бронь', stock.reserved, 'Уже исключена из свободного остатка', 'accent') + metric('Свободно к расходу', stock.free, 'Повторно бронь не вычитаем') + metric('По таблице в пути', inboundTotal, 'Дата приёмки учитывается отдельно') + metric('Расчётный заказ', lastValue, plan ? 'Условная потребность при выбранной политике' : 'Нужны сроки и правила запаса', lastValue > 0 ? 'accent' : '');
   const ready = plan?.status === 'provisional', risk = ready && plan.first_deficit_date;
-  const title = !item ? 'Выберите товар из выданных таблиц' : !plan ? 'История загружена. Для закупки нужны ваши параметры' : !ready ? 'Расчёт остановлен: не хватает подтверждённых входов' : risk ? `Риск дефицита с ${dateText(plan.first_deficit_date)}` : lastValue > 0 ? 'Пополнение поддержит заданный уровень запаса' : 'В выбранном горизонте дополнительный заказ не нужен';
-  const sub = !plan ? 'Модель не подставляет выдуманные сроки или запасы. Задайте условия во вкладке «Данные и допущения».' : !ready ? (plan.reasons || []).join(' ') : plan.pre_arrival_risk ? 'Новый заказ не успеет закрыть дефицит до его приёмки. Этот риск остаётся в графике.' : 'Результат условный: прогноз по истории продаж, отчётные остатки и указанные вами сроки. Исходные файлы не изменены.';
+  const title = !item ? 'Выберите товар из выданных таблиц' : !plan ? 'История загружена. Для закупки нужны ваши параметры' : !ready ? 'Расчёт остановлен: не хватает подтверждённых входов' : risk ? `Без нового заказа — риск дефицита с ${dateText(plan.first_deficit_date)}` : lastValue > 0 ? 'Пополнение поддержит заданный уровень запаса' : 'В выбранном горизонте дополнительный заказ не нужен';
+  const sub = !plan ? 'Модель не подставляет выдуманные сроки или запасы. Задайте условия во вкладке «Условия закупки».' : !ready ? (plan.reasons || []).join(' ') : plan.pre_arrival_risk ? 'Новый заказ не успеет закрыть дефицит до его приёмки. Этот риск остаётся в графике.' : 'Результат условный: прогноз по истории продаж, отчётные остатки и указанные вами сроки. Исходные файлы не изменены.';
   $('summary-banner').classList.toggle('risk', Boolean(risk || (plan && !ready)));
   $('summary-banner').innerHTML = `<div><span class="eyebrow">${ready ? 'Условный сценарий · не подтверждённый заказ' : 'Объяснимый расчёт'}</span><h1>${esc(title)}</h1><p>${esc(sub)}</p></div><button data-go="${ready ? 'recommendations' : 'parameters'}" class="primary" type="button">${ready ? 'Открыть рекомендацию' : 'Задать параметры'}</button>`;
   $('explanation-title').textContent = ready ? 'Обоснование количества' : 'История — основа прогноза';
@@ -200,18 +234,23 @@ async function loadBootstrap(reload = false) {
     $('source-date').textContent = `Срез источника: ${dateText(result.as_of)}`;
     const suppliers = document.createDocumentFragment(); const all = document.createElement('option'); all.value='';all.textContent='Все поставщики';suppliers.appendChild(all);
     for(const name of result.suppliers || []){const option=document.createElement('option');option.value=name;option.textContent=name;suppliers.appendChild(option);} $('supplier').replaceChildren(suppliers);
-    $('source-files').innerHTML = table(['Файл', 'Поставщик', 'Чтение'], (result.sources || []).map((r) => [r.file,r.supplier,r.status === 'not_parsed' ? 'Сохранён как источник; не смешан с месячной базой' : 'Прочитаны сохранённые значения']));
-    renderDraft(); displaySelector(key); message(reload ? 'Источники перечитаны. Старые расчёты и черновик сброшены.' : '');
+    $('source-files').innerHTML = table(['Файл', 'Поставщик', 'Участие в расчёте'], (result.sources || []).map((r) => [r.file,r.supplier,r.status === 'not_parsed' ? 'Зафиксирован, не участвует в расчёте' : r.status === 'read_cached_values' ? 'Используется: сохранённые значения' : 'Статус не подтверждён']));
+    $('catalog-source-files').innerHTML = $('source-files').innerHTML;
+    $('catalog-source-summary').textContent = `Файлы источника (${result.sources?.length || 0}) · для ячеек конкретного товара откройте «Условия закупки»`;
+    state.catalogPage = 1; renderDraft(); displaySelector(key); showTab(state.tab, false); message(reload ? 'Источники перечитаны. Старые расчёты и черновик сброшены.' : '');
   } catch(error) { message(error.message, true); } finally { $('reload').disabled=false; }
 }
 document.addEventListener('click', (event) => {
+  const item = event.target.closest('[data-select-item]'); if (item) { $('item-select').value = item.dataset.selectItem; selectItem(item.dataset.selectItem); showTab('today'); }
   const tab = event.target.closest('[data-tab],[data-go]'); if (tab) showTab(tab.dataset.tab || tab.dataset.go);
   if (event.target.closest('#add-draft')) addDraft();
   const remove = event.target.closest('[data-remove]'); if (remove) {state.drafts.delete(remove.dataset.remove);renderDraft();renderRecommendation();}
 });
-$('supplier').addEventListener('change', () => displaySelector());
-$('search').addEventListener('input', () => displaySelector());
-$('item-select').addEventListener('change', (event) => selectItem(event.target.value));
+$('supplier').addEventListener('change', () => {state.catalogPage=1;displaySelector();});
+$('search').addEventListener('input', () => {state.catalogPage=1;displaySelector();});
+$('item-select').addEventListener('change', (event) => {if(event.target.value) selectItem(event.target.value);else showTab('catalog');});
+$('catalog-prev').addEventListener('click', () => {state.catalogPage--;renderCatalog();});
+$('catalog-next').addEventListener('click', () => {state.catalogPage++;renderCatalog();});
 $('policy-form').addEventListener('submit', calculate);
 $('policy-form').addEventListener('input', () => invalidatePlan(true));
 $('policy-form').addEventListener('change', () => invalidatePlan(true));

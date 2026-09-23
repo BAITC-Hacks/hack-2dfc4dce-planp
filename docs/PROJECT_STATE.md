@@ -2,7 +2,16 @@
 
 Обновлено: 2026-09-23, Asia/Qyzylorda.
 
-## Актуальный MVP — готов к финальной Git-приёмке
+## Срез приёмки перед PR, 23.09.2026
+
+- На момент этого checkpoint по подтверждению ведущего **PR #1 merged**, `main` SHA **53aae44**, [Render LIVE](https://qorai.onrender.com) с предыдущей версией интерфейса; новый каталог принят локально. Конечный статус следующего release устанавливается отдельно по GitHub/Render.
+- Новый desktop-каталог, README и ALGORITHM прочитаны и одобрены ведущим. Документы этого worker **FROZEN**, переданы release-исполнителю; Git/deploy этого этапа не выполнялись.
+- Проверки: **127 pytest passed / 0 skips / 28.83s / exit 0**; после последних UI-уточнений Node syntax PASS, **18 helper assertions + 23 catalog checks PASS**, exit 0. Browser QA ведущего: без autoselect, 3045 SKU (IEK 2463 / SystemElectric 582), поиск/пагинация/пустое состояние/«Нет данных» PASS, errors `[]`.
+- Прямое сравнение ATN540126 с XLSX: AX42 / AY19 / AZ23, pack6. Явный технический сценарий L2/H30/SS7/MOQ0, ETA08.10 дал Q36 → черновик → передача серверного CSV браузеру; сохранение нового файла на диск не подтверждено. Evidence и точные границы — [QA_REPORT](QA_REPORT.md), [E2E_BOT_REGISTRY](E2E_BOT_REGISTRY.md).
+- Честная полнота кейса: must-have 1/2/5 частичны, 3/4 не реализованы; 8 источников parsed, 4 только hash/регистрация. Операционные строки существуют; clientID и ежедневной доступности в проверенной схеме нет. [CASE_COMPLIANCE](CASE_COMPLIANCE.md) фиксирует требования, код, схему и реальный Fable-ответ.
+- Mobile NOT VERIFIED, Docker build NOT RUN. Сырые XLSX, секреты, outputs и снимки не включаются в Git. История ниже не переопределяет этот статус.
+
+## История: MVP перед первой Git-приёмкой
 
 - Официальное имя: **QORAI — управление запасами**. Repo и Python-пакет smartbuyer не переименованы.
 - Импорт/прогноз/backtest/CLI, условная закупка, API и desktop UI реализованы. Итоговый integrated run: **127 passed, 0 skips, 19.43s**; frontend18 helper assertions PASS.

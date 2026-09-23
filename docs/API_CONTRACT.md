@@ -3,7 +3,7 @@
 2026-09-23. API реализован:19 исходных тестов PASS; итоговый набор после host/TLS-proxy guard —37 API-тестов PASS. Основные browser-пути проверены отдельно. По умолчанию один процесс `127.0.0.1:8765`, same-origin; без авторизации, внешней отправки заказов и загрузки произвольных файлов.
 Источники — только папка `HACKALEM_DATA_DIR` с выданными 12 XLSX. `null` означает неизвестно, не ноль. Ключ товара: `supplier + "::" + sku`.
 
-Host allowlist задаётся явно через `HACKALEM_ALLOWED_HOSTS`; по умолчанию только localhost/127.0.0.1/::1. Origin должен совпадать со схемой/хостом/портом. Внешняя привязка требует явного `HACKALEM_BIND_HOST` и разрешённого домена, но публикация не выполнялась. Это не авторизация пользователя; ограничения и reverse proxy — в [DEPLOYMENT.md](DEPLOYMENT.md).
+Host allowlist задаётся явно через `HACKALEM_ALLOWED_HOSTS`; по умолчанию только localhost/127.0.0.1/::1. Origin должен совпадать со схемой/хостом/портом. Внешняя привязка требует явного `HACKALEM_BIND_HOST` и разрешённого домена. Первая публикация Render проверена 23.09.2026; фактические настройки и ограничения — в [DEPLOYMENT.md](DEPLOYMENT.md). Host allowlist не является авторизацией пользователя.
 
 При TLS termination можно явно задать точный `HACKALEM_PUBLIC_ORIGIN`, согласованный с allowlist: это решает HTTPS-origin/HTTP-backend без wildcard доверия прокси. Чужой Host/Origin отклоняется HTTP403. Настройка не создаёт публичный URL и не заменяет авторизацию.
 
@@ -19,6 +19,10 @@ Host allowlist задаётся явно через `HACKALEM_ALLOWED_HOSTS`; п
 
 `items` в bootstrap: `key, sku, supplier, name, unit, stock, pack_multiple, moq, forecast_units, mean_units, forecast_status, backtest_tested, seasonal_mae, mean_mae`.
 `forecast_units` — сезонный кандидат, `mean_units` — простой средний; выбор метода для условной закупки отдельно в политике. Статусы источника и запаса не скрываются.
+
+`sources[].status` различает `read_cached_values` и `not_parsed`. На выданном наборе зарегистрированы12 файлов:8 разобраны,4 (`transactions` и `seasonality` обоих поставщиков) только проверены по хешу, без разбора строк и участия в расчёте. Количество sources не является количеством полностью проанализированных источников. `read_cached_values` также не означает влияние всех ячеек файла на прогноз.
+
+`coverage.order_blocked_items` относится к исходному CLI-отчёту прогнозов. Условные заказы рассчитываются отдельно через `/api/plan`; этот счётчик не пересчитывается как число всех возможных допустимых сценариев. Все пять требований кейса и границы подтверждения перечислены в [CASE_COMPLIANCE](CASE_COMPLIANCE.md).
 
 ```json
 {"lead_days":null,"cover_days":null,"safety_days":null,"moq":null,"method":"auto","use_reported_stock":false,"regular_only":false}

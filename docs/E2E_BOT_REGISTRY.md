@@ -2,6 +2,23 @@
 
 2026-09-23. Статус API не подменяет браузерный путь. Источник тестов — выданные XLSX, технические настройки помечены как настройки, не новые бизнес-данные.
 
+## Срез приёмки перед PR, 23.09.2026
+
+На момент этого checkpoint основной MVP опубликован через PR #1, `main` SHA `53aae44`, [Render LIVE](https://qorai.onrender.com). Новый каталог, README и ALGORITHM приняты ведущим; итог следующего release проверяется отдельно по GitHub/Render. Следующие сценарии выполнены ведущим в локальном браузере; worker повторил только автоматические проверки.
+
+| ID | Путь / наблюдаемый итог | Evidence / статус |
+|---|---|---|
+| WEB-CAT-01 | старт → каталог без autoselect, счётчики по брендам | PASS: 3045 = IEK 2463 + SystemElectric 582; `outputs/audit-04-new-catalog.png` |
+| WEB-CAT-02 | поиск ATN540126 → исходная строка и упаковка | PASS: 42 / 19 / 23, pack 6; прямое сравнение ведущего с XLSX `AX258/AY258/AZ258`; `outputs/audit-05-source-row.png` |
+| WEB-CAT-03 | открыть → явные условия → расчёт → черновик | PASS: L2/H30/SS7/MOQ0, ETA 08.10.2026 → Q36; `outputs/audit-06-new-conditions.png`, `audit-07-calculated-overview.png`, `audit-08-order-draft.png` |
+| WEB-CAT-04 | экспорт черновика → сервер передаёт CSV браузеру | PASS для server→browser transfer; сохранение нового файла на диск и обратное чтение NOT VERIFIED, не подменяются историческим Q300-файлом |
+| WEB-CAT-05 | неизвестное значение / следующая страница / пустой поиск | PASS: IEK «Нет данных»; страница 2 из 99; пустой результат 1 из 1 и 0–0; browser errors `[]` |
+| WEB-CAT-06 | reload → явная навигация / расчёт → окончательный заголовок и верх экрана | PASS в браузере ведущего: h1 «Без нового заказа — риск дефицита с 01.10.2026», Q36, `window.scrollY=0`; `outputs/audit-09-final-calculation.png` |
+
+Ведущий визуально просмотрел все снимки 04–09: PASS. Последние уточнения «Без нового заказа — риск…» и scroll-to-top также проверены повтором `node --check` (exit 0), **18 helper assertions + 23 catalog checks PASS** (оба exit 0). Полный pytest: **127 passed / 0 skips / 28.83s / exit 0**. Это не browser evidence для неупомянутых сценариев, не mobile-проверка и не подтверждение всех must-have; см. [CASE_COMPLIANCE](CASE_COMPLIANCE.md).
+
+## Исторические сценарии предыдущего UI и API
+
 | ID | Путь / наблюдаемый итог | Evidence / статус |
 |---|---|---|
 | API-01 | bootstrap → item: источник/дата/прогноз/остаток совпадают | `tests/test_api.py::test_bootstrap_source_date_defaults_and_selected_forecast` PASS |
