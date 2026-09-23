@@ -13,7 +13,11 @@ QORAI помогает закупщику решить, **что и скольк
 
 ### [Открыть QORAI →](https://qorai.onrender.com)
 
-В демо загружены **3045 товаров из 12 выданных XLSX IEK / Systeme Electric**. Срез источников — 22 сентября 2026. Работают прогноз, календарь, условный заказ, черновик и CSV. Render Free после простоя может запускаться 50 секунд и дольше.
+В демо загружены **3045 товаров из 12 выданных XLSX IEK / Systeme Electric**. Срез источников — 22 сентября 2026. Работают прогноз, календарь, условный заказ, черновик и CSV. Первая загрузка Render Free может занять несколько минут: при проверке первый запрос данных занял **около 183 секунд**; следующие запросы используют готовый снимок и работают быстрее.
+
+**Быстрая проверка:** выберите `ATN540126` → откройте «Условия закупки» → проверьте предзаполненные демонстрационные **2 / 30 / 7 / 0** → отметьте **оба подтверждения** → нажмите «Рассчитать потребность». По другим товарам отсутствующая или недостаточная история может блокировать расчёт: это не означает, что Excel не загрузились.
+
+Основная конкурсная версия: [репозиторий, ветка main](https://github.com/BAITC-Hacks/hack-2dfc4dce-planp/tree/main). Этот файл — единственный основной README; подробные технические документы находятся в `docs/`.
 
 ## Одна задержка — другое решение о закупке
 
@@ -38,22 +42,22 @@ Python **3.13**; команды выполняются из корня клон�
 
 ```powershell
 Set-Location '<папка клона>/hack-2dfc4dce-planp'
-py -m pip install -r requirements.txt
-py scripts/bootstrap_data.py --output-dir data/issued
+py -3.13 -m pip install -r requirements.txt
+py -3.13 scripts/bootstrap_data.py --output-dir data/issued
 $env:HACKALEM_DATA_DIR = (Resolve-Path 'data/issued').Path
 $env:HACKALEM_DATA_ROOT = $env:HACKALEM_DATA_DIR  # совместимость тестов импортёра
-py -m smartbuyer.serve
+py -3.13 -m smartbuyer.serve
 ```
 
-Откройте `http://127.0.0.1:8765`. Если папка `04_Excel` уже есть, вместо загрузки укажите её в `HACKALEM_DATA_DIR`, сохранив подпапки IEK / Systeme electric. На Linux/macOS используйте `python` вместо `py` и `export HACKALEM_DATA_DIR=data/issued`.
+Откройте `http://127.0.0.1:8765`. Если папка `04_Excel` уже есть, вместо загрузки укажите её в `HACKALEM_DATA_DIR`, сохранив подпапки IEK / Systeme electric. На Windows флаг `-3.13` выбирает проверенную версию Python, а не другой установленный Python без зависимостей. На Linux/macOS используйте `python3.13` вместо `py -3.13` и `export HACKALEM_DATA_DIR=data/issued`.
 
 Первый запрос читает Excel; следующие используют снимок. «Перечитать Excel» обновляет только настроенную папку, при ошибке сохраняет прошлый исправный набор. Повторный bootstrap сверяет уже загруженные файлы и не перезаписывает неизвестные.
 
 CLI — из второго терминала с теми же переменными:
 
 ```powershell
-py -m smartbuyer.cli --data-dir "$env:HACKALEM_DATA_DIR" --target 2026-10 --sku ATN544045 --format json
-py -m smartbuyer.cli --data-dir "$env:HACKALEM_DATA_DIR" --target 2026-10 --sku ATN544045 --format csv
+py -3.13 -m smartbuyer.cli --data-dir "$env:HACKALEM_DATA_DIR" --target 2026-10 --sku ATN544045 --format json
+py -3.13 -m smartbuyer.cli --data-dir "$env:HACKALEM_DATA_DIR" --target 2026-10 --sku ATN544045 --format csv
 ```
 
 Без `--sku` рассчитываются все позиции. CLI пишет UTF-8 в stdout, ошибки — в stderr с кодом 2; исходники не изменяет. `--as-of` может уменьшить дату отсечения, но не продвинуть её позже даты источника. CLI экспортирует прогноз; закупочный сценарий доступен через интерфейс/API.
@@ -91,7 +95,7 @@ Q = 0, если Qraw = 0; иначе pack × ceil(max(Qraw, MOQ) / pack)
 Текущая версия прошла **161 Python-тест без пропусков** (независимый полный прогон, 233,19s), **73 frontend-проверки** и desktop browser QA нового demo-пути: Q24, дата03.10, коррекции и маркировка условий. Адресные проверки входят в этот результат, их не нужно прибавлять. Evidence и границы — в [QA_REPORT](docs/QA_REPORT.md). При первой публикации Render 23.09.2026 подтверждены 3045 товаров / 12 источников и совпадающий CSV. Это проверки реализации, не процент точности модели.
 
 ```powershell
-py -m pytest -q
+py -3.13 -m pytest -q
 node --check web/app.js
 node web/app.test.cjs
 node tests/frontend_catalog.cjs
