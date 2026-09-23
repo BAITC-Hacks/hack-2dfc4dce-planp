@@ -1,0 +1,13 @@
+# Only application code and static assets enter the build context.
+**
+!Dockerfile
+!requirements.txt
+!smartbuyer/
+!smartbuyer/*.py
+!web/
+!web/index.html
+!web/app.js
+!web/styles.css
+!web/assets/
+!web/assets/*.ttf
+!web/assets/OFL-Inter.txt
