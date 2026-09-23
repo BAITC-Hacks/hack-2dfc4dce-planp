@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>QORAI — управление запасами</title>
+  <meta name="description" content="QORAI — управление запасами. Прогноз продаж и условный расчёт закупки на выданных данных HackAlem.">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Перейти к содержимому</a>
+<header class="topbar">
+  <div class="brand-row"><div class="brand" aria-label="QORAI — управление запасами">QORAI <span class="brand-description">Управление запасами</span></div><span class="environment">HackAlem · Логистика</span><span id="source-date" class="source-date">Загрузка среза…</span><button id="reload" class="header-button" type="button">Перечитать Excel</button></div>
+  <nav class="tabs" aria-label="Разделы"><button data-tab="today" aria-current="page" type="button">Сегодня · обзор и дефицит</button><button data-tab="recommendations" type="button">Рекомендации и черновик <span id="draft-count"></span></button><button data-tab="parameters" type="button">Данные и допущения</button></nav>
+</header>
+<div class="source-notice">Источник спроса — выданная месячная таблица. До сверки с операциями расчёт считается условным. <button type="button" data-go="parameters" class="text-button">Проверить допущения</button></div>
+<main id="main">
+  <div id="message" class="message" role="status" aria-live="polite" hidden></div>
+  <section class="selector-bar" aria-label="Выбор товара">
+    <label>Поставщик<select id="supplier"><option value="">Все поставщики</option></select></label>
+    <label class="search-label">Поиск по артикулу или названию<input id="search" type="search" placeholder="Найти товар в выданных таблицах" autocomplete="off"></label>
+    <label class="item-label">Товар <span id="item-count"></span><select id="item-select" aria-label="Выбранный товар"><option>Загрузка…</option></select></label>
+  </section>
+  <div id="selection-meta" class="selection-meta">Выберите товар, чтобы посмотреть расчёт.</div>
+
+  <section id="today" class="page" aria-label="Сегодня">
+    <div id="summary-banner" class="card summary-banner"><div><span class="eyebrow">Объяснимый расчёт</span><h1>От прогноза продаж к обоснованному заказу</h1><p>История, остатки и поставки — в одном месте. Для расчёта заказа задайте сроки и правила запаса.</p></div><button data-go="parameters" class="primary" type="button">Задать параметры</button></div>
+    <div id="metrics" class="metrics"></div>
+    <div class="overview-grid">
+      <section class="card chart-card"><div class="section-heading"><div><h2 id="chart-title">История продаж</h2><p id="chart-subtitle" class="muted">Только значения выданных таблиц</p></div><span class="badge">Расчёт без LLM</span></div><div id="chart-legend" class="legend"></div><div class="chart-wrap"><canvas id="main-chart" role="img" aria-label="График продаж или прогнозного остатка"></canvas></div><p id="chart-caption" class="muted small"></p><details><summary>Числа графика в таблице</summary><div id="chart-table" class="table-scroll"></div></details></section>
+      <aside class="card explanation-card"><span class="eyebrow">Почему система так считает</span><h2 id="explanation-title">Сначала данные, затем решение</h2><div id="explanation"></div><button type="button" data-go="parameters" class="primary full">Настроить и рассчитать</button><button id="forecast-export" type="button" class="secondary full">Экспорт прогноза CSV</button></aside>
+    </div>
+    <section class="card"><div class="section-heading"><div><h2>Проверка прогноза на истории</h2><p class="muted">Одинаковые прошедшие месяцы для обоих методов</p></div></div><div id="comparison"></div></section>
+    <section id="calendar-section" class="card" hidden><h2>Движение запаса по датам</h2><p class="muted">Поставка пополняет прогноз в свою дату. Дефицит до новой поставки остаётся видимым.</p><div id="calendar" class="table-scroll"></div></section>
+  </section>
+
+  <section id="recommendations" class="page" aria-label="Рекомендации и черновик" hidden>
+    <div class="recommendations-grid"><section><div class="section-heading"><div><span class="eyebrow">Что, сколько и когда</span><h1>Рекомендация к заказу</h1></div></div><div id="recommendation" class="card"></div></section><aside class="card draft-card"><span class="eyebrow">Документ снабжения</span><h2>Черновик по поставщикам</h2><p class="muted">Только рассчитанные позиции. Заказ не отправляется поставщику.</p><div id="draft"></div><button id="export-draft" type="button" class="primary full" disabled>Экспортировать черновик CSV</button><button id="clear-draft" type="button" class="secondary full" disabled>Очистить черновик</button></aside></div>
+  </section>
+
+  <section id="parameters" class="page" aria-label="Данные и допущения" hidden>
+    <section class="card"><span class="eyebrow">Прозрачная модель</span><h1>Данные и расчётные параметры</h1><p class="muted">Неизвестное остаётся неизвестным. Вводимые значения — ваши допущения для выбранного товара, а не факты из Excel.</p><div id="data-summary" class="data-summary"></div></section>
+    <form id="policy-form" class="card">
+      <div class="section-heading"><div><h2>Срок поставки и правила запаса</h2><p class="muted">Дни календарные; срок включает время до приёмки на склад.</p></div><span class="badge warning">Требует подтверждения менеджера</span></div>
+      <div class="form-grid"><label>Срок до приёмки, дней<input name="lead_days" type="number" min="0" max="180" step="1" placeholder="Не задан" required></label><label>Покрытие после приёмки, дней<input name="cover_days" type="number" min="1" max="180" step="1" placeholder="Не задан" required></label><label>Страховой запас, дней<input name="safety_days" type="number" min="0" step="any" placeholder="Не задан" required></label><label>Минимальный заказ, ед.<input name="moq" type="number" min="0" step="any" placeholder="Неизвестен; 0 — без минимума" required></label><label>Метод прогноза<select name="method"><option value="auto">Автовыбор по ошибке на истории</option><option value="mean_12">Простое среднее</option><option value="seasonal_growth">Сезонность × динамика</option></select></label><div class="field-info"><span>Кратность из источника</span><strong id="pack-value">Неизвестна</strong><small>Неизвестная кратность не заменяется единицей.</small></div></div>
+      <div class="confirmations"><label><input name="use_reported_stock" type="checkbox" required><span>Использовать отчётный свободный остаток для этого условного расчёта. Это не проверенный склад в реальном времени.</span></label><label><input name="regular_only" type="checkbox" required><span>Сценарий по истории продаж без отдельного графика клиентских заказов. Бронь сохраняется; возможен перехлёст с прогнозом. Крупные разовые продажи не очищены автоматически.</span></label></div>
+      <section class="incoming-section"><h3>Существующий товар в пути</h3><p class="muted">Можно изменить дату существующей партии и увидеть последствия задержки. Исходные таблицы не меняются.</p><div id="incoming"></div></section>
+      <div class="form-actions"><button id="calculate" type="submit" class="primary">Рассчитать потребность</button><button id="reset-policy" type="button" class="secondary">Сбросить допущения</button><span id="form-status" class="muted small"></span></div>
+    </form>
+    <section class="card"><h2>Происхождение данных и ограничения</h2><details open><summary>Важные предупреждения</summary><ul id="warnings" class="warning-list"></ul></details><details><summary>Ячейки-источники выбранного товара</summary><div id="source-refs" class="table-scroll"></div></details><details><summary>Выданные файлы</summary><div id="source-files" class="table-scroll"></div></details></section>
+  </section>
+</main>
+<footer><span>QORAI — управление запасами · HackAlem</span><span>Без внешней отправки заказов · Только выданные данные</span></footer>
+</body>
+</html>

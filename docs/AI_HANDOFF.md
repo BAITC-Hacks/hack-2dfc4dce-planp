@@ -1,6 +1,19 @@
-# AI handoff — HackAlem Logistics
+# AI handoff — QORAI, HackAlem Logistics
 
-## Актуально: FORECAST-CORE-20260923
+## Актуально: WEB-MVP-20260923 — release_ready, awaiting Git GO
+
+- Владелец разрешил оставшийся MVP и последующие PR/merge после проверок. Бренд **QORAI — управление запасами**; пакет/repo сохраняют технические имена.
+- Кодовые scope завершены: M — replenishment; UI — web и bootstrap-helper; API/hosting guard — отдельный reviewer/worker; I — интеграция/README/память/release manifest. Параллельные изменения одного файла не выполняются.
+- Итоговый I release-check: `py -m pytest -q` → **127 passed in19.43s,0skips** на выданном наборе; до него независимый91PASS, API37PASS и helper18PASS. Web18 helper assertions PASS после ребрендинга.
+- Root browser QA: поиск/политика/ETA/объяснение/черновик/реальный CSV/reload PASS. Stale draft исправлен и retestPASS. Desktop3снимка сравнены со Stitch; mobile NOT VERIFIED (viewport не применился), признан остаточным риском desktop-first MVP.
+- Только12 выданных XLSX. Helper фиксирует2 публичных архива и12 hashes, безопасно распаковывает, не перезаписывает неизвестные данные. Реальная загрузка совпала побайтово; XLSX/outputs/design/env не stage.
+- Python3.13 pinned. Exact Host/Origin + PUBLIC_ORIGIN проверены; launcher один worker с безопасным loopback-default. Docker CLI отсутствует: build NOT RUN. Внешний deploy и URL отсутствуют; хостинг делает владелец.
+- Свой старый previewPID20500/launcher9660 подтверждён по lineage/command/listener и остановлен. Новый hidden launcher14556/server7492: smartbuyer.serve,127.0.0.1:8765. Health/bootstrapPASS (22.09,3045,12); перед дальнейшим stop заново проверитьPID.
+- Точный stage manifest готовится без бизнес-данных/секретов. Ни stage, ни commit/push/PR/merge этого release ещё не выполнены; требуется финальное GO ведущего.
+- Ponytail: existing data/forecast/CLI, один процесс/cache, vanilla UI, нет DB/paidLLM/scaffold. Ни ночное обучение, ни ERP/live-склад, ни гарантированная экономия не реализованы.
+- История ниже сохраняет прежние этапы/полномочия; актуальные контракты только TECH_SPEC/API_CONTRACT, результаты QA_REPORT/E2E_BOT_REGISTRY/design-qa.
+
+## История: FORECAST-CORE-20260923
 
 - Read-only CLI-срез реализован: D — data/тесты, M — forecast/backtest/тесты, I — `smartbuyer/cli.py`, `tests/test_cli.py`, requirements/.gitignore/README/docs. На выданных источниках общий прогон дал 44 passed без skips; ожидается приёмка ведущим.
 - Текущий контракт: [TECH_SPEC.md](TECH_SPEC.md), задачи: [ROADMAP.md](ROADMAP.md). Они отменяют прежние самодельные бизнес-fixtures/DEMO-001: только выданные 12 XLSX, unknown не0; чужие исходники не меняются.

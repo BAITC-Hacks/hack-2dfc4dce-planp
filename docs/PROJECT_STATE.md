@@ -1,6 +1,20 @@
-# Состояние проекта — HackAlem Logistics
+# Состояние проекта — QORAI, HackAlem Logistics
 
 Обновлено: 2026-09-23, Asia/Qyzylorda.
+
+## Актуальный MVP — готов к финальной Git-приёмке
+
+- Официальное имя: **QORAI — управление запасами**. Repo и Python-пакет smartbuyer не переименованы.
+- Импорт/прогноз/backtest/CLI, условная закупка, API и desktop UI реализованы. Итоговый integrated run: **127 passed, 0 skips, 19.43s**; frontend18 helper assertions PASS.
+- Ведущий проверил поиск, политику, существующую ETA, объяснение количества, черновик, реальный CSV и reload; stale draft исправлен и перепроверен. Desktop design QA завершена; mobile NOT VERIFIED из-за неприменённого viewport.
+- Helper получает ровно публичные исходные архивы организатора с pinned SHA256 архивов и12 XLSX; реальная загрузка совпала с выданными файлами. Нет новых бизнес-данных или исходных XLSX в Git.
+- Python3.13 закреплён; launcher/Docker/host-origin guard подготовлены. Хостинг настраивает владелец. Docker build NOT RUN (нет CLI), публичного URL/deploy нет.
+- Preview после итоговых тестов перезапущен на текущем коде:127.0.0.1:8765, health/bootstrap PASS,12 источников/3045 позиций/дата22.09.2026.
+- Расчёты закупки остаются provisional-сценарием обычных продаж по явно заданной политике и отчётному AZ. Неизвестные клиентские обязательства и дневная доступность не выдумываются; full-case/экономия не доказаны.
+- Ветка docs/logistics-plan-20260923, origin BAITC-Hacks/hack-2dfc4dce-planp. Владелец разрешил PR/merge после проверок; финальное Git GO ведущего ожидается. Текущий release ещё не staged/committed/pushed/merged.
+- Текущие инструкции: README, TECH_SPEC, API_CONTRACT, RUNBOOK, DEPLOYMENT, QA_REPORT, design-qa. Следующие разделы — история предыдущих этапов, не актуальный статус.
+
+## История исходного среза
 
 - Локальная рабочая папка существует на МБ: `C:/Users/emilk/Documents/Codex/2026-09-22/karina-ssh-tailscale-host-100-98/hack-2dfc4dce-planp`.
 - Конкурсный origin: `git@github.com:BAITC-Hacks/hack-2dfc4dce-planp.git`.
