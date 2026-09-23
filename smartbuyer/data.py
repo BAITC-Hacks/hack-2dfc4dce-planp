@@ -1,7 +1,7 @@
 """Read the supplied HackAlem workbooks without executing or changing formulas."""
 
 from collections import Counter
-from datetime import datetime
+from datetime import date, datetime
 from hashlib import sha256
 from math import isfinite, isclose
 from pathlib import Path
@@ -120,6 +120,8 @@ def _check_header(rows, row_number, expected, source):
 def _item(sku, supplier, name):
     return {"sku": sku, "supplier": supplier, "name": _text(name), "unit": None,
             "category": None, "history": {}, "partial_months": [],
+            "stock_history": {}, "stock_history_metadata": {"timing": "month_start", "daily_availability": False},
+            "transactions_monthly": {},
             "stock": {"reported": None, "reserved": None, "free": None,
                       "as_of": None, "status": "missing"},
             "pack_multiple": None, "moq": None, "inbound": [], "warnings": [], "source_refs": []}
@@ -127,6 +129,100 @@ def _item(sku, supplier, name):
 
 def _ref(item, relative, sheet, cell_range, field):
     item["source_refs"].append({"file": relative, "sheet": sheet, "range": cell_range, "field": field})
+
+
+def _transaction_date(value):
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    try:
+        return datetime.strptime(_text(value), "%d.%m.%Y %H:%M:%S")
+    except ValueError:
+        return None
+
+
+def _aggregate_transactions(rows, items, as_of):
+    """Stream issued operations; expose quantities, never document/customer IDs.
+
+    Several lines of one invoice are one observation with their quantities added.
+    Negative lines are not inferred to be returns or netted against positive sales.
+    """
+    counts = Counter(i["internal_code"] for i in items if i["internal_code"])
+    by_code = {i["internal_code"]: i for i in items
+               if i["internal_code"] and counts[i["internal_code"]] == 1}
+    documents, ranges = {}, {}
+    stats = Counter()
+    cutoff = date.fromisoformat(as_of)
+    for number, row in enumerate(rows, 2):
+        stats["rows_read"] += 1
+        if len(row) < 8:
+            stats["invalid_rows"] += 1
+            continue
+        doc = _text(row[2])
+        # The supplied files also contain inbound invoices and customer orders.
+        if not re.match(r"^Расходная накладная(?:\s|$)", doc):
+            stats["non_sales_rows"] += 1
+            continue
+        qty = row[7]
+        if isinstance(qty, bool) or not isinstance(qty, (int, float)) or not isfinite(qty) or qty <= 0:
+            stats["non_positive_or_invalid_rows"] += 1
+            continue
+        stamp, doc_number, code = _transaction_date(row[0]), _text(row[1]), _text(row[3])
+        if stamp is None or not doc_number or not code:
+            stats["missing_document_key_rows"] += 1
+            continue
+        if stamp.date() > cutoff:
+            stats["after_cutoff_rows"] += 1
+            continue
+        item = by_code.get(code)
+        if item is None:
+            stats["unmatched_or_ambiguous_code_rows"] += 1
+            continue
+        if not item["unit"] or _text(row[5]) != item["unit"]:
+            stats["unmatched_unit_rows"] += 1
+            continue
+        key = (stamp, doc_number, doc)
+        bucket = documents.setdefault(code, {}).setdefault(stamp.strftime("%Y-%m"), {})
+        bucket[key] = bucket.get(key, 0.0) + float(qty)
+        span = ranges.setdefault(code, [number, number])
+        span[1] = number
+        stats["accepted_rows"] += 1
+    output = {}
+    for code, months in documents.items():
+        output[code] = {}
+        for month, docs in sorted(months.items()):
+            quantities = [q for _, q in sorted(docs.items()) if isfinite(q) and q > 0]
+            output[code][month] = {"document_quantities": quantities,
+                                   "positive_total": sum(quantities), "document_count": len(quantities)}
+    return output, ranges, dict(stats)
+
+
+def _read_transactions(root, relative, items, source):
+    """The file was validated/hashed by _read; its large worksheet stays streamed."""
+    book = load_workbook(root / relative, read_only=True, data_only=True, keep_links=False)
+    try:
+        if "Лист_1" not in book.sheetnames:
+            raise ValueError(f"Лист Лист_1 отсутствует: {relative}")
+        rows = book["Лист_1"].iter_rows(values_only=True)
+        _check_header([next(rows, ())], 1, dict(enumerate(
+            ("Дата", "Номер", "Документ", "Код", "Номенклатура", "Ед.", "Склад", "Количество"))), relative)
+        monthly, ranges, stats = _aggregate_transactions(rows, items, AS_OF)
+    finally:
+        book.close()
+    source.update(status="read_cached_values", parse_summary=stats)
+    caveats = ["Только положительные строки расходных накладных; отрицательные строки не вычитаются и не названы возвратами.",
+               "Строки одного документа суммируются; идентификатор документа и клиент не передаются.",
+               "Область складов — выданный файл целиком; с месячной базой продаж ещё не сверена.",
+               "Отсутствие документов не означает нулевой спрос; месячная база history не изменена."]
+    for item in items:
+        code = item["internal_code"]
+        item["transactions_monthly"] = monthly.get(code, {})
+        item["transactions_metadata"] = {"status": "matched" if code in monthly else "no_matched_sales",
+                                         "as_of": AS_OF, "caveats": caveats}
+        if code in ranges:
+            first, last = ranges[code]
+            _ref(item, relative, "Лист_1", f"A{first}:H{last}", "transactions_monthly")
 
 
 def load_dataset(data_root: str | Path) -> dict:
@@ -147,7 +243,7 @@ def load_dataset(data_root: str | Path) -> dict:
                   "Прочитаны сохранённые значения Excel; формулы не исполнялись и не пересчитывались.",
                   "Дата 2026-09-22 взята из имён файлов, это не подтверждение живых остатков.",
                   "Нет подтверждённых клиентских заказов, дневной доступности и срока новой поставки.",
-                  "Таблицы операций и готовых коэффициентов не смешиваются с месячными продажами.",
+                  "Месячные продажи — база; доля крупных расходных документов используется для коррекции; готовые коэффициенты сезонности пока не применяются.",
               ]}
     for supplier, files in FILES.items():
         systeme = supplier == "SystemElectric"
@@ -173,6 +269,8 @@ def load_dataset(data_root: str | Path) -> dict:
         pack_index, pack_dupes = _index(tables["pack"], 3 if systeme else 1,
                                        2 if systeme else 1, result["warnings"], files["pack"])
         unit_index, unit_dupes = _index(tables["stock_history"], 2, 2, result["warnings"], files["stock_history"])
+        stock_months = _months(tables["stock_history"][0])
+        supplier_items = []
         # ponytail: fixed supplied layouts, not a general spreadsheet-mapping engine.
         keys = set(sales_index) | sales_dupes
         if systeme:
@@ -199,6 +297,9 @@ def load_dataset(data_root: str | Path) -> dict:
                 n, row = unit_row
                 item["unit"] = _text(row[3 if systeme else 1]) or None
                 _ref(item, files["stock_history"], "Лист_1", f"{'D' if systeme else 'B'}{n}", "unit")
+                item["stock_history"] = {month: _number(row[col], item["warnings"], f"stock_history!{get_column_letter(col+1)}{n}")
+                                         for col, month in stock_months.items()}
+                _ref(item, files["stock_history"], "Лист_1", f"{get_column_letter(min(stock_months)+1)}{n}:{get_column_letter(max(stock_months)+1)}{n}", "stock_history")
             if code in unit_dupes:
                 item["warnings"].append("Неоднозначная единица измерения по коду.")
             pack_row = pack_index.get(sku)
@@ -260,4 +361,7 @@ def load_dataset(data_root: str | Path) -> dict:
             if any(v is None for v in item["history"].values()):
                 item["warnings"].append("Есть неизвестные месяцы продаж: пустые ячейки не приравнены нулю.")
             result["items"].append(item)
+            supplier_items.append(item)
+        transaction_source = next(s for s in result["sources"] if s["supplier"] == supplier and s["role"] == "transactions")
+        _read_transactions(root, files["transactions"], supplier_items, transaction_source)
     return result

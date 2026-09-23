@@ -125,12 +125,15 @@ def forecast_month(
     return result
 
 
-def rolling_backtest(history: Mapping[str, float | None], months: Sequence[str]) -> dict:
+def rolling_backtest(history: Mapping[str, float | None], months: Sequence[str],
+                     actual_history: Mapping[str, float | None] | None = None) -> dict:
     """Compare both forecasts on the SAME valid actual months, past-only per origin.
 
     Caller must select completed historical target months, never a partial month.
     Eligible means valid actual; tested additionally requires BOTH forecasts.
     Positive bias means overprediction. Metrics are sales units, not inventory ROI.
+    Optional actual_history scores raw observations while history may be causally
+    adjusted. Each training value must not depend on subsequent months.
     """
     methods = ("seasonal_growth", "mean_12")
     points, skipped, seen = [], [], set()
@@ -145,7 +148,7 @@ def rolling_backtest(history: Mapping[str, float | None], months: Sequence[str])
             skipped.append({"month": month, "reasons": ["duplicate test month"]})
             continue
         seen.add(month)
-        actual = history.get(month)
+        actual = (history if actual_history is None else actual_history).get(month)
         if not _valid(actual):
             skipped.append({"month": month, "reasons": ["Actual is missing, negative or nonfinite."]})
             continue
@@ -168,5 +171,7 @@ def rolling_backtest(history: Mapping[str, float | None], months: Sequence[str])
             "points": points, "metrics": metrics,
             "assumptions": ["Caller selected complete historical test months.",
                             "Both methods scored on identical eligible observations.",
+                            "Scores use raw observed sales, not imputed latent demand." if actual_history is not None
+                            else "Scores use the supplied observed history.",
                             "Monthly source is available immediately after month end.",
                             "Forecast accuracy alone does not establish inventory savings."]}

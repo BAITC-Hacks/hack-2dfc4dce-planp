@@ -51,6 +51,7 @@ class Policy(BaseModel):
     method: Literal["auto", "mean_12", "seasonal_growth"] = "auto"
     use_reported_stock: Annotated[bool, Field(strict=True)] = False
     regular_only: Annotated[bool, Field(strict=True)] = False
+    scenario_mode: Literal["manual", "demonstration"] = "manual"
 
 
 class PlanRequest(BaseModel):
@@ -192,7 +193,9 @@ def create_app(data_root=None):
     def item(key: str):
         snap = snapshot()
         source_item, row = selected(snap, key)
-        return {"item": source_item, "report": row, "metadata": {"as_of": snap["dataset"]["as_of"],
+        # Documents stay server-side; monthly summaries/provenance are in report.
+        public_item = {key: value for key, value in source_item.items() if key != "transactions_monthly"}
+        return {"item": public_item, "report": row, "metadata": {"as_of": snap["dataset"]["as_of"],
                 "target_month": snap["report"]["target_month"], "warnings": snap["dataset"]["warnings"]}}
 
     @app.post("/api/plan")
@@ -223,7 +226,7 @@ def create_app(data_root=None):
             results = [result for result in results if result["status"] == "provisional" and result["order"]["quantity"] is not None and result["order"]["quantity"] > 0]
             if not results:
                 _error(400, "nothing_to_export", "Нет положительных неблокированных заказов для экспорта. Прогноз можно экспортировать отдельно.")
-            fields = ["supplier", "sku", "name", "unit", "quantity", "status", "stock_status", "as_of", "planned_order_date", "arrival", "method", "policy", "assumptions", "reasons", "sources", "result_id"]
+            fields = ["supplier", "sku", "name", "unit", "quantity", "status", "stock_status", "as_of", "planned_order_date", "arrival", "method", "policy", "assumptions", "reasons", "sources", "demand_adjustment", "result_id"]
             output = io.StringIO(newline="")
             writer = csv.DictWriter(output, fieldnames=fields, lineterminator="\n")
             writer.writeheader()
@@ -233,7 +236,7 @@ def create_app(data_root=None):
                        "stock_status": result["item"]["stock"].get("status"), "as_of": result["as_of"],
                        "planned_order_date": result["order"].get("planned_order_date"),
                        "arrival": result["order"]["arrival"], "method": result["forecast"]["method"], "result_id": result["result_id"]}
-                for field in ("policy", "assumptions", "reasons", "sources"):
+                for field in ("policy", "assumptions", "reasons", "sources", "demand_adjustment"):
                     row[field] = json.dumps(result[field], ensure_ascii=False, allow_nan=False)
                 writer.writerow({field: _csv_cell(row[field]) for field in fields})
             return _csv_response(output.getvalue(), "conditional-orders.csv")

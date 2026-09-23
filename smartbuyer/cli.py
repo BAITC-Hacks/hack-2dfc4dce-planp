@@ -12,6 +12,7 @@ import sys
 from zipfile import BadZipFile
 
 from smartbuyer.forecast import forecast_month, rolling_backtest
+from smartbuyer.demand import adjust_demand
 
 
 def _month(value):
@@ -44,11 +45,15 @@ def build_report(dataset, target, sku=None, as_of=None):
     for item in selected:
         partial = set(item.get("partial_months", []))
         # Partial source months cannot become training or targets, even at an earlier cutoff.
-        history = {month: quantity for month, quantity in item["history"].items() if month not in partial}
+        raw_history = {month: quantity for month, quantity in item["history"].items() if month not in partial}
+        adjustment = adjust_demand(item, cutoff)
+        history = adjustment["adjusted_history"]
         methods = {method: forecast_month(history, target, cutoff, method)
                    for method in ("seasonal_growth", "mean_12")}
+        for result in methods.values():
+            result["assumptions"][0] = "История содержит раскрытые оценки очистки документов/месячного дефицита; исходные продажи сохранены отдельно."
         months = sorted(month for month in history if month < cutoff[:7])[-6:]
-        backtest = rolling_backtest(history, months)
+        backtest = rolling_backtest(history, months, actual_history=raw_history)
         reasons = [
             "Не подтверждены полнота и состав открытых клиентских обязательств.",
             "Не задан полный срок новой поставки L.",
@@ -69,7 +74,7 @@ def build_report(dataset, target, sku=None, as_of=None):
             f"База {basis}: {_number_text(history.get(basis))}; множитель динамики: "
             f"{_number_text(seasonal['trend_multiplier'])}. Средний метод учитывает число дней "
             "в каждом из 12 полных месяцев. Источник не признан окончательным эталоном; "
-            "аномалии и отсутствие товара не исправлены автоматически. Это не объём закупки."
+            "корректировки крупных документов и месячного дефицита оценочные, не подтверждённый спрос. Это не объём закупки."
         )
         rows.append({
             "sku": item["sku"], "supplier": item.get("supplier"), "name": item.get("name"),
@@ -81,6 +86,7 @@ def build_report(dataset, target, sku=None, as_of=None):
             "mean_calculation_status": methods["mean_12"]["status"],
             "mean_forecast_status": "provisional" if methods["mean_12"]["status"] == "ok" else "blocked",
             "forecasts": methods, "backtest_months": months, "backtest": backtest,
+            "demand_adjustment": adjustment,
             "order_status": "blocked", "order_quantity": None, "order_reasons": reasons,
             "warnings": item.get("warnings", []), "explanation": explanation,
         })
@@ -97,7 +103,7 @@ def build_report(dataset, target, sku=None, as_of=None):
         },
         "limitations": [
             "Использованы только выданные источники; их происхождение не объявляется реальным или синтетическим.",
-            "Месячная база — рабочее допущение; она не смешивается с операциями.",
+            "Месячная база — рабочее допущение; доля избытка документов нормируется к ней, а месячная компенсация не определяет дни stockout.",
             "MAE относится к наблюдаемым продажам отдельного SKU, не к истинному спросу или экономии.",
             "Не рассчитаны твёрдые даты дефицита и количество закупки; неизвестные входы не заменены нулями.",
         ],
@@ -123,7 +129,7 @@ def render_report(report, output_format="json"):
               "backtest_tested", "calculation_status", "forecast_status", "mean_calculation_status",
               "mean_forecast_status", "order_status", "order_quantity", "order_reasons",
               "reported_stock", "reserved_stock", "free_stock", "stock_as_of", "stock_status", "source_refs",
-              "sources", "warnings", "explanation"]
+              "sources", "warnings", "explanation", "demand_adjustment"]
     output = io.StringIO(newline="")
     writer = csv.DictWriter(output, fieldnames=fields, lineterminator="\n")
     writer.writeheader()
@@ -145,6 +151,7 @@ def render_report(report, output_format="json"):
             free_stock=stock.get("free"), stock_as_of=stock.get("as_of"), stock_status=stock.get("status"),
             source_refs=json.dumps(row["source_refs"], ensure_ascii=False),
             sources=json.dumps(report["sources"], ensure_ascii=False),
+            demand_adjustment=json.dumps(row.get("demand_adjustment"), ensure_ascii=False, allow_nan=False),
             warnings=json.dumps({"dataset": report["warnings"], "item": row["warnings"],
                                  "forecasts": {method: result["warnings"]
                                                for method, result in row["forecasts"].items()}}, ensure_ascii=False),

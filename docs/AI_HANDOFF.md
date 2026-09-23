@@ -1,6 +1,16 @@
 # AI handoff — QORAI, HackAlem Logistics
 
-## Срез приёмки перед PR, 23.09.2026
+## 2026-09-23 — коррекция спроса, integration in_progress
+
+- Владелец разрешил две обязательные функции; ведущий выделил независимые scope. Data worker завершил только data.py/test_data.py: потоковые положительные расходные документы + месячный stock_history; 15 passed, источники не изменены. Документация затем передана этому же worker.
+- Core worker сообщил FROZEN: demand/replenishment/forecast/API/CLI включают оценочную очистку и компенсацию, сырой MAE, маркировку demo; 122 focused passed + адресные 48 passed. Итоговый QA и browser — отдельные исполнители, результаты не суммировать.
+- Контракт stock_history — месячные начальные снимки; transactions_monthly — положительные документные количества/сумма/число, без document IDs. 10 parsed / 2 coefficient-only; monthly history raw сохранена. Подробности API_CONTRACT/ALGORITHM.
+- README/CASE_COMPLIANCE обновляются только по фактическому коду и проверенным сценариям. Не объявлять подтверждённые дни stockout, клиентов, экономию или 100% кейса. Git/PR/merge/deploy — после отдельного GO ведущего; никаких исходных XLSX/outputs/design в stage.
+- Срочный code-only GO выполнен: `a4c94fe2a57b989cafb6508327d2b4a401938a95` commit/push 14 файлов, staged check/secret scan PASS, remote=head. Docs остались unstaged, design нетронут. Ведущий прочитал/принял README/ALGORITHM/CASE_COMPLIANCE; ждём итоговые full pytest/browser и отдельное release GO.
+- Full pytest получен: **161 passed / 0 skips / 233.19s / exit0**; это единственный текущий полный прогон. Остались browser/demo и release GO; повторять полный pytest без изменений не требуется.
+- Final local acceptance получена: **161 Python +73 frontend PASS**, browser Q24/03.10/19месяцев/36документов, demo-label/acknowledgements/draft/CSV UI/errors[] PASS. Screenshots10/11 просмотрены ведущим; новое disk download не доказано. Root RELEASE GO: заморозить8docs, commit/push, PR+attach+обычное merge, private deployment FF-sync и проверка LIVE; без новых функций.
+
+## История: срез приёмки перед PR #2, 23.09.2026
 
 - На момент этого checkpoint по подтверждению ведущего основной MVP merged в PR #1, `main` SHA `53aae44`, [Render LIVE](https://qorai.onrender.com) с прежним UI. Новый каталог принят локально; конечный статус следующего release устанавливается отдельно по GitHub/Render.
 - Последний общий pytest: **127 passed in 28.83s, 0 skips, exit 0** на выданном наборе. После последних UI-текста/scroll правок повторены Node syntax check, **18 helper assertions**, **23 catalog checks** — все exit 0. Последний разрешённый diff-check был PASS до финальных правок; повтор и release — после нового GO.

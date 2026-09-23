@@ -15,6 +15,7 @@ import pytest
 from smartbuyer.cli import _csv_cell, build_report, render_report
 from smartbuyer.data import FILES, load_dataset
 from smartbuyer.forecast import forecast_month
+from smartbuyer.demand import adjust_demand
 
 
 DATA_ROOT = Path(os.environ.get("HACKALEM_DATA_DIR", os.environ.get("HACKALEM_DATA_ROOT",
@@ -41,6 +42,9 @@ def test_known_sku_forecasts_match_source_arithmetic(report):
         book.close()
     history = dict(zip((f"{2024+i//12}-{i%12+1:02d}" for i in range(33)), source[4:37]))
     row = report["rows"][0]
+    for point in row["demand_adjustment"]["monthly"]:
+        assert point["raw"] == history[point["month"]]
+    history = row["demand_adjustment"]["adjusted_history"]
     growth = sum(history[f"2026-{m:02d}"] for m in (6, 7, 8)) / sum(history[f"2025-{m:02d}"] for m in (6, 7, 8))
     months = [f"2025-{m:02d}" for m in range(9, 13)] + [f"2026-{m:02d}" for m in range(1, 9)]
     daily_average = sum(history[m] / monthrange(int(m[:4]), int(m[5:]))[1] for m in months) / 12
@@ -70,6 +74,7 @@ def test_json_csv_share_results_statuses_nulls_and_sources(report):
     assert json.loads(csv_row["source_refs"]) == row["source_refs"]
     assert json.loads(csv_row["sources"]) == report["sources"]
     assert csv_row["stock_status"] == row["stock"]["status"]
+    assert json.loads(csv_row["demand_adjustment"]) == row["demand_adjustment"]
 
 
 def test_backtest_complete_past_months_and_metrics(dataset, report):
@@ -79,7 +84,8 @@ def test_backtest_complete_past_months_and_metrics(dataset, report):
     assert not set(row["backtest_months"]) & set(item["partial_months"])
     assert row["backtest"]["tested"] == len(row["backtest_months"])
     for point in row["backtest"]["points"]:
-        past = {month: value for month, value in item["history"].items() if month < point["month"]}
+        past = adjust_demand(item, point["month"] + "-01")["adjusted_history"]
+        assert point["actual"] == item["history"][point["month"]]
         for method, quantity in point["forecasts"].items():
             expected = forecast_month(past, point["month"], point["month"] + "-01", method)
             assert quantity == expected["forecast_units"]
