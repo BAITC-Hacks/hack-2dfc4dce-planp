@@ -3,6 +3,7 @@
 from copy import deepcopy
 import csv
 import io
+import json
 import os
 from pathlib import Path
 
@@ -54,6 +55,35 @@ def test_empty_policy_blocks_order_not_zero(client):
     assert result["reasons"] and len(result["result_id"]) == 64
     exported = client.post("/api/export", json={"result_ids": [result["result_id"]]})
     assert exported.status_code == 400 and exported.json()["error"]["code"] == "nothing_to_export"
+
+
+def test_demand_adjustment_and_demo_provenance_reach_server_csv(client, policy):
+    item_before = client.get("/api/item", params={"key": KEY}).json()
+    assert "transactions_monthly" not in item_before["item"]
+    adjustment = item_before["report"]["demand_adjustment"]
+    assert adjustment["monthly"] and adjustment["source_refs"]
+    for point in adjustment["monthly"]:
+        assert point["raw"] == item_before["item"]["history"][point["month"]]
+    manual = client.post("/api/plan", json={"key": KEY, "policy": policy}).json()
+    policy["scenario_mode"] = "demonstration"
+    demo = client.post("/api/plan", json={"key": KEY, "policy": policy}).json()
+    assert demo["demand_adjustment"] == adjustment
+    assert demo["order"] == manual["order"]
+    assert demo["result_id"] != manual["result_id"]
+    assert demo["policy"]["scenario_mode"] == "demonstration"
+    assert any("Демонстрационные настройки" in value for value in demo["assumptions"])
+    exported = client.post("/api/export", json={"result_ids": [demo["result_id"]]})
+    assert exported.status_code == 200
+    row = next(csv.DictReader(io.StringIO(exported.text)))
+    assert json.loads(row["policy"])["scenario_mode"] == "demonstration"
+    assert json.loads(row["demand_adjustment"]) == adjustment
+    assert "Демонстрационные настройки" in row["assumptions"]
+    assert client.get("/api/item", params={"key": KEY}).json()["item"] == item_before["item"]
+
+
+def test_invalid_scenario_mode_rejected(client, policy):
+    policy["scenario_mode"] = "silent-default"
+    assert client.post("/api/plan", json={"key": KEY, "policy": policy}).status_code == 400
 
 
 def test_plan_identity_csv_exact_quantity_and_status(client, policy):

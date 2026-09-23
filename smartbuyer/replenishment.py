@@ -9,6 +9,7 @@ from numbers import Real
 import re
 
 from .forecast import forecast_month, rolling_backtest
+from .demand import adjust_demand
 
 
 def _number(value):
@@ -49,7 +50,7 @@ def plan_item(item: dict, as_of: str, policy: dict, eta_overrides: dict | None =
             "Приходы учитываются как отчётный сценарий, не как подтверждённая приёмка.",
             "Прогноз наблюдаемых продаж распределён равномерно по календарным дням после даты среза.",
             "Отрицательная проекция — расчётный баланс / накопленный дефицит, не отрицательный физический склад или подтверждённые backorders.",
-            "Пустые продажи не нули; нет очистки разовых сделок и компенсации stockout.",
+            "Пустые продажи не нули; очистка крупных документов и месячная компенсация дефицита — оценки с раскрытыми ограничениями.",
             "L — полный срок до принятого прихода. H — число дат A..A+H-1 включительно.",
             "Новый заказ в сценарии размещается на дату расчёта; последний допустимый срок отдельно не вычислен.",
             "Ночная самообучающаяся система не реализована.",
@@ -70,6 +71,15 @@ def plan_item(item: dict, as_of: str, policy: dict, eta_overrides: dict | None =
     except (ValueError, TypeError) as exc:
         reasons.append(str(exc))
         return result
+    if not isinstance(item.get("history"), Mapping):
+        reasons.append("Нет корректной месячной истории продаж.")
+        return result
+    try:
+        result["demand_adjustment"] = adjust_demand(item, as_of)
+    except (ValueError, TypeError, AttributeError):
+        reasons.append("Некорректная структура или месяцы истории для подготовки спроса.")
+        return result
+    result["assumptions"].extend(result["demand_adjustment"]["assumptions"])
     if not isinstance(policy, Mapping):
         reasons.append("Нет параметров закупочной политики.")
         return result
@@ -88,6 +98,12 @@ def plan_item(item: dict, as_of: str, policy: dict, eta_overrides: dict | None =
         if not valid:
             reasons.append(f"Не задан или некорректен параметр {key}.")
     result["policy"].update({key: policy.get(key) is True for key in ("use_reported_stock", "regular_only")})
+    scenario_mode = policy.get("scenario_mode", "manual")
+    result["policy"]["scenario_mode"] = scenario_mode if scenario_mode in ("manual", "demonstration") else None
+    if result["policy"]["scenario_mode"] is None:
+        reasons.append("Неизвестный режим сценария.")
+    elif scenario_mode == "demonstration":
+        result["assumptions"].append("Демонстрационные настройки, не политика компании.")
     method = policy.get("method", "auto")
     result["policy"]["method"] = method if isinstance(method, str) else None
     if method not in ("auto", "mean_12", "seasonal_growth"):
@@ -172,14 +188,16 @@ def plan_item(item: dict, as_of: str, policy: dict, eta_overrides: dict | None =
         reasons.append("Нет месячной истории продаж.")
         return result
     partial = set(item.get("partial_months") or [])
-    history = {key: value for key, value in history.items() if key not in partial}
-    backtest = rolling_backtest(history, [m for m in _previous_months(cutoff) if m not in partial])
+    raw_history = {key: value for key, value in history.items() if key not in partial}
+    history = result["demand_adjustment"]["adjusted_history"]
+    backtest = rolling_backtest(history, [m for m in _previous_months(cutoff) if m not in partial],
+                                actual_history=raw_history)
     tested = backtest["tested"]
     seasonal_mae = backtest["metrics"]["seasonal_growth"]["mae_units"]
     mean_mae = backtest["metrics"]["mean_12"]["mae_units"]
     result["metrics"].update(tested=tested, seasonal_mae=seasonal_mae, mean_mae=mean_mae)
     selection = result["forecast"]
-    selection["selection_warning"] = "Ошибка на периодах выбора метода не является независимой проверкой его будущей точности."
+    selection["selection_warning"] = "MAE по исходным наблюдаемым продажам, не истинному скрытому спросу; ошибка на периодах выбора не является независимой проверкой будущей точности."
     if method == "auto":
         method = "seasonal_growth" if tested >= 3 and seasonal_mae < mean_mae else "mean_12"
         selection["selection_reason"] = ("Минимальный MAE на одинаковых исторических месяцах; при равенстве выбран mean_12."

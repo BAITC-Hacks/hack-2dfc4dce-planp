@@ -39,7 +39,8 @@ def test_daily_balance_and_rounding_match_independent_arithmetic(atlas, policy, 
     result = plan_item(atlas, dataset["as_of"], policy)
     assert result["status"] == "provisional"
     months = [f"2025-{m:02d}" for m in range(9, 13)] + [f"2026-{m:02d}" for m in range(1, 9)]
-    rate = sum(atlas["history"][m] / monthrange(int(m[:4]), int(m[5:]))[1] for m in months) / 12
+    adjusted = result["demand_adjustment"]["adjusted_history"]
+    rate = sum(adjusted[m] / monthrange(int(m[:4]), int(m[5:]))[1] for m in months) / 12
     balance = atlas["stock"]["free"]
     for row in result["calendar"]:
         balance += row["inbound"] - rate

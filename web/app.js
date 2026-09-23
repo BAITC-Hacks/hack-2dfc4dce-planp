@@ -2,7 +2,7 @@
    Request gates, null-safe fields and result-ID export adapted from Claude Opus's packet draft. */
 'use strict';
 const $ = (id) => document.getElementById(id);
-const state = { bootstrap: null, key: null, item: null, report: null, plan: null, drafts: new Map(), tab: 'catalog', chart: null, catalogPage: 1 };
+const state = { bootstrap: null, key: null, item: null, report: null, plan: null, drafts: new Map(), tab: 'catalog', chart: null, catalogPage: 1, demo: false };
 const numberFormat = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
 const fmt = (value) => typeof value === 'number' && Number.isFinite(value) ? numberFormat.format(value) : 'Нет данных';
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -88,29 +88,55 @@ function invalidatePlan(removeDraft = false) {
   updateSteps();
 }
 async function selectItem(key) {
-  state.key = key; state.item = null; state.report = null; invalidatePlan();
+  state.key = key; state.item = null; state.report = null; state.demo = false; renderDemoNote(); $('known-data').innerHTML = ''; invalidatePlan();
   $('selection-meta').textContent = 'Загружаем выбранный товар…'; $('policy-form').reset(); $('calculate').disabled = true;
   const ticket = itemGate.start();
   try {
     const result = await json(`/api/item?key=${encodeURIComponent(key)}`, { signal: ticket.signal });
     if (!ticket.current() || state.key !== key) return;
-    state.item = result.item; state.report = result.report; resetPolicy(false); renderItem(); message('');
+    state.item = result.item; state.report = result.report; resetPolicy(false); applyDemoPreset(); renderItem(); message('');
   } catch (error) { if (ticket.current() && error.name !== 'AbortError') { message(error.message, true); renderItem(); } }
 }
 function resetPolicy(removeDraft = true) {
+  state.demo = false;
   $('policy-form').reset();
   const defaults = state.bootstrap?.policy_defaults || {};
   for (const name of ['lead_days', 'cover_days', 'safety_days', 'moq']) $('policy-form').elements[name].value = name === 'moq' ? (state.item?.moq ?? '') : (defaults[name] ?? '');
   $('policy-form').elements.method.value = defaults.method || 'auto';
-  renderIncoming(); invalidatePlan(removeDraft);
+  renderIncoming(); renderDemoNote(); invalidatePlan(removeDraft);
+}
+// Fable proposed known-data summaries and an explicit demo preset; applied with owner-approved prefilling.
+function knownDataRows(item) {
+  if (!item) return [];
+  const stock = item.stock || {}, months = Object.keys(item.history || {}).sort();
+  return [['Отчётный остаток', fmt(stock.reported)], ['Бронь из отчёта', fmt(stock.reserved)], ['Свободно (бронь уже вычтена)', fmt(stock.free)], ['Единица', item.unit || 'Нет данных'], ['Кратность', fmt(item.pack_multiple)], ['MOQ из источника', fmt(item.moq)], ['Код категории (без расшифровки)', item.category || 'Нет данных'], ['История', months.length ? `${months[0]} — ${months.at(-1)}` : 'Нет данных'], ['Ссылок на ячейки источника', String((item.source_refs || []).length)]];
+}
+function demoPolicyFor(item) { return item ? {lead_days:2, cover_days:30, safety_days:7, moq:item.moq ?? 0, method:'auto'} : null; }
+function demoEtaFor(item, index) {
+  const row = item?.inbound?.[index];
+  return item?.supplier === 'SystemElectric' && item.sku === 'ATN540126' && index === 0 && row?.quantity === 120 && !row.eta ? '2026-10-08' : null;
+}
+function renderDemoNote() {
+  $('demo-note').hidden = !state.demo || !state.item;
+  $('demo-note').textContent = 'Демонстрационные настройки и ручные допущения — не правила компании. Начальные значения: срок 2 дня, покрытие 30 дней, страховой запас 7 дней; MOQ берётся из источника, а при его отсутствии демо-значение 0. Подтверждения и расчёт — вручную.' + (demoEtaFor(state.item, 0) ? ' Для ATN540126 дата 08.10.2026 — демонстрационная задержка существующей партии, не дата из Excel.' : ' Неизвестные даты поставок нужно уточнить отдельно.');
+}
+function applyDemoPreset() {
+  const preset = demoPolicyFor(state.item); if (!preset) return;
+  const form = $('policy-form'); state.demo = true;
+  for (const [key, value] of Object.entries(preset)) form.elements[key].value = String(value);
+  for (const key of ['use_reported_stock', 'regular_only']) form.elements[key].checked = false;
+  renderIncoming();
+  document.querySelectorAll('[data-eta]').forEach((input) => { const eta = demoEtaFor(state.item, Number(input.dataset.eta)); if (eta) input.value = eta; });
+  renderDemoNote(); invalidatePlan(true);
 }
 function renderItem() {
   const item = state.item;
-  if (!item) { $('selection-meta').textContent = state.key ? 'Данные товара пока недоступны.' : 'Выберите товар в таблице.'; $('calculate').disabled = true; $('forecast-export').disabled = true; renderOverview(); renderRecommendation(); return; }
+  if (!item) { $('known-data').innerHTML = ''; renderDemoNote(); $('selection-meta').textContent = state.key ? 'Данные товара пока недоступны.' : 'Выберите товар в таблице.'; $('calculate').disabled = true; $('forecast-export').disabled = true; renderOverview(); renderRecommendation(); return; }
   const stock = item.stock || {};
   $('selection-meta').innerHTML = `<strong>${esc(item.sku)}</strong> · ${esc(item.name)} &nbsp; / &nbsp; ${esc(item.supplier)} &nbsp; / &nbsp; Ед.: ${esc(item.unit || 'не подтверждена')} &nbsp; / &nbsp; Срез: ${esc(dateText(stock.as_of || state.bootstrap.as_of))}`;
   $('pack-value').textContent = item.pack_multiple == null ? 'Неизвестна' : `${fmt(item.pack_multiple)} ${item.unit || ''}`;
   $('data-summary').innerHTML = `<span>SKU: <strong>${esc(item.sku)}</strong></span><span>Дата набора: <strong>${esc(dateText(state.bootstrap.as_of))}</strong></span><span>Прогноз на: <strong>${esc(state.bootstrap.target_month)}</strong></span><span>Исторических месяцев: <strong>${Object.keys(item.history || {}).length}</strong></span>`;
+  $('known-data').innerHTML = knownDataRows(item).map(([label,value]) => `<span>${esc(label)}: <strong>${esc(value)}</strong></span>`).join('');
   const warnings = [...(state.bootstrap.warnings || []), ...(item.warnings || [])];
   $('warnings').innerHTML = [...new Set(warnings)].map((x) => `<li>${esc(x)}</li>`).join('');
   $('source-refs').innerHTML = table(['Файл', 'Лист', 'Диапазон', 'Поле'], (item.source_refs || []).map((r) => [r.file, r.sheet, r.range, r.field]));
@@ -128,13 +154,14 @@ function explainOrder(plan) {
 }
 function renderOverview() {
   const item = state.item, plan = state.plan, report = state.report, brief = selectedBrief(), stock = item?.stock || {};
+  renderDemandAdjustment(plan?.demand_adjustment || report?.demand_adjustment);
   const inbound = item?.inbound || [];
   const inboundTotal = inbound.length && inbound.every((r) => typeof r.quantity === 'number') ? inbound.reduce((a, r) => a + r.quantity, 0) : null;
   const lastValue = plan?.order?.quantity;
   $('metrics').innerHTML = metric('Отчётный остаток', stock.reported, 'Не подтверждение приёмки в реальном времени') + metric('Отчётная бронь', stock.reserved, 'Уже исключена из свободного остатка', 'accent') + metric('Свободно к расходу', stock.free, 'Повторно бронь не вычитаем') + metric('По таблице в пути', inboundTotal, 'Дата приёмки учитывается отдельно') + metric('Расчётный заказ', lastValue, plan ? 'Условная потребность при выбранной политике' : 'Нужны сроки и правила запаса', lastValue > 0 ? 'accent' : '');
   const ready = plan?.status === 'provisional', risk = ready && plan.first_deficit_date;
   const title = !item ? 'Выберите товар из выданных таблиц' : !plan ? 'История загружена. Для закупки нужны ваши параметры' : !ready ? 'Расчёт остановлен: не хватает подтверждённых входов' : risk ? `Без нового заказа — риск дефицита с ${dateText(plan.first_deficit_date)}` : lastValue > 0 ? 'Пополнение поддержит заданный уровень запаса' : 'В выбранном горизонте дополнительный заказ не нужен';
-  const sub = !plan ? 'Модель не подставляет выдуманные сроки или запасы. Задайте условия во вкладке «Условия закупки».' : !ready ? (plan.reasons || []).join(' ') : plan.pre_arrival_risk ? 'Новый заказ не успеет закрыть дефицит до его приёмки. Этот риск остаётся в графике.' : 'Результат условный: прогноз по истории продаж, отчётные остатки и указанные вами сроки. Исходные файлы не изменены.';
+  const sub = !plan ? 'Данные товара загружены. Проверьте демонстрационные настройки или задайте свои условия во вкладке «Условия закупки».' : !ready ? (plan.reasons || []).join(' ') : plan.pre_arrival_risk ? 'Новый заказ не успеет закрыть дефицит до его приёмки. Этот риск остаётся в графике.' : 'Результат условный: прогноз по истории продаж, отчётные остатки и указанные вами сроки. Исходные файлы не изменены.';
   $('summary-banner').classList.toggle('risk', Boolean(risk || (plan && !ready)));
   $('summary-banner').innerHTML = `<div><span class="eyebrow">${ready ? 'Условный сценарий · не подтверждённый заказ' : 'Объяснимый расчёт'}</span><h1>${esc(title)}</h1><p>${esc(sub)}</p></div><button data-go="${ready ? 'recommendations' : 'parameters'}" class="primary" type="button">${ready ? 'Открыть рекомендацию' : 'Задать параметры'}</button>`;
   $('explanation-title').textContent = ready ? 'Обоснование количества' : 'История — основа прогноза';
@@ -157,6 +184,16 @@ function renderOverview() {
   $('chart-legend').innerHTML = state.chart.lines.map((line) => `<span style="--legend-color:${line.color}">${line.name}</span>`).join('');
   $('chart-table').innerHTML = table(['Период', ...state.chart.lines.map((l) => l.name)], state.chart.labels.map((label, i) => [label, ...state.chart.lines.map((l) => fmt(l.values[i]))]));
   requestAnimationFrame(drawChart);
+}
+function renderDemandAdjustment(adjustment) {
+  $('demand-section').hidden = !adjustment;
+  $('regular-scope-note').textContent = 'Сценарий по истории продаж без отдельного графика клиентских заказов. Бронь сохраняется; возможен перехлёст с прогнозом. ' + (adjustment ? 'Корректировки разовых отгрузок и дефицита оценочные; проверьте их в обзоре товара.' : 'Крупные разовые продажи не очищены автоматически.');
+  if (!adjustment) { $('demand-summary').innerHTML = ''; $('demand-table').innerHTML = ''; $('demand-assumptions').innerHTML = ''; return; }
+  const summary = adjustment.summary || {}, labels = [['Изменено месяцев',summary.months_adjusted],['Кандидатов разовых документов',summary.outlier_documents],['Исключено из прогнозной базы, ед.',summary.removed_units],['Месяцев с оценкой дефицита',summary.stockout_months],['Оценка упущенных продаж, ед.',summary.estimated_lost_units]];
+  $('demand-summary').innerHTML = labels.map(([label,value]) => `<span>${esc(label)}: <strong>${esc(fmt(value))}</strong></span>`).join('');
+  const status = {estimated:'Оценка по модели',not_indicated:'Признак не найден',missing_opening_stock:'Нет начального остатка',insufficient_reference:'Мало опорных месяцев',invalid_sales:'Некорректные продажи'};
+  $('demand-table').innerHTML = table(['Месяц','Исходные продажи','После разовых отгрузок','Скорректировано','Документов-кандидатов','Оценка упущенного','Статус дефицита'], (adjustment.monthly || []).map((row) => [row.month,fmt(row.raw),fmt(row.after_outlier),fmt(row.adjusted),fmt(row.outlier_documents),fmt(row.estimated_lost_units),status[row.stockout_status] || 'Нет подтверждённого статуса']));
+  $('demand-assumptions').innerHTML = (adjustment.assumptions || []).map((value) => `<li>${esc(value)}</li>`).join('');
 }
 function drawChart() {
   const canvas = $('main-chart'); if (!state.chart || state.tab !== 'today' || !canvas.clientWidth) return;
@@ -182,6 +219,7 @@ function readPolicy() {
   const form = $('policy-form'), policy = {};
   for (const name of ['lead_days','cover_days','safety_days','moq']) { const value = form.elements[name].value.trim(); policy[name] = value === '' ? null : Number(value); }
   policy.method = form.elements.method.value;
+  policy.scenario_mode = state.demo ? 'demonstration' : 'manual';
   for (const name of ['use_reported_stock','regular_only']) policy[name] = form.elements[name].checked;
   return policy;
 }
@@ -201,9 +239,10 @@ async function calculate(event) {
 }
 function renderRecommendation() {
   const plan = state.plan;
-  if (!plan) { $('recommendation').innerHTML = '<div class="empty-state"><h2>Сначала рассчитайте потребность</h2><p>Укажите сроки и правила запаса для выбранного товара. Здесь появятся количество, дата и объяснение.</p><button type="button" class="primary" data-go="parameters">К параметрам</button></div>'; return; }
+  if (!plan) { const item = state.item; $('recommendation').innerHTML = `<h2>${item ? `${esc(item.sku)}: расчёт ещё не выполнен` : 'Выберите товар в каталоге'}</h2>${item ? table(['Из источника', 'Значение'], [['Поставщик', item.supplier], ['Свободно', fmt(item.stock?.free)], ['Бронь (уже исключена)', fmt(item.stock?.reserved)], ['Кратность', fmt(item.pack_multiple)], ['Единица', item.unit || 'Нет данных']]) : ''}<p class="muted">${state.demo ? 'Демо-настройки заполнены, но не подтверждены. ' : ''}Проверьте условия и отметьте подтверждения. Количество заказа появится только после расчёта.</p><button type="button" class="primary" data-go="parameters">Проверить условия и рассчитать</button>`; return; }
   const order = plan.order || {}, canAdd = plan.status === 'provisional' && order.quantity > 0 && plan.result_id;
   $('recommendation').innerHTML = `<div class="recommendation-title">${esc(plan.item.sku)} · ${esc(plan.item.name)}</div><span class="badge ${plan.status === 'provisional' ? '' : 'warning'}">${plan.status === 'provisional' ? 'Условный расчёт' : 'Нужны данные'}</span><p class="muted small">Поставщик: ${esc(plan.item.supplier)}</p><div class="order-stats"><div><span>Рекомендовано</span><strong>${esc(fmt(order.quantity))} ${esc(plan.item.unit || '')}</strong></div><div><span>Плановая приёмка</span><strong>${esc(dateText(order.arrival))}</strong></div><div><span>Кратность из таблицы</span><b>${esc(fmt(order.pack_multiple))}</b></div><div><span>Минимальная партия</span><b>${esc(fmt(order.moq))}</b></div></div><div class="explanation-block"><strong>${esc(methodText(plan.forecast?.method))}</strong>${esc(plan.forecast?.selection_reason || 'Сначала подтвердите необходимые входы.')}</div>${plan.reasons?.length ? `<ul class="warning-list">${plan.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}<details><summary>Все допущения расчёта</summary><ul class="warning-list">${(plan.assumptions || []).map((r) => `<li>${esc(r)}</li>`).join('')}</ul></details><button id="add-draft" type="button" class="primary full" ${canAdd ? '' : 'disabled'}>${state.drafts.has(state.key) ? 'Обновить позицию в черновике' : 'Добавить в черновик'}</button><p class="muted small" style="margin-top:12px">Черновик требует согласования. Данные не отправляются во внешние системы.</p>`;
+  if (plan.policy?.scenario_mode === 'demonstration') $('recommendation').innerHTML = '<p class="badge warning">Демонстрационный сценарий · не политика компании</p>' + $('recommendation').innerHTML;
 }
 function addDraft() {
   const plan = state.plan;
@@ -215,6 +254,7 @@ function renderDraft() {
   for (const [key, plan] of state.drafts) { const name = plan.item.supplier; if (!groups.has(name)) groups.set(name, []); groups.get(name).push([key,plan]); }
   $('draft').innerHTML = groups.size ? [...groups].map(([supplier, rows]) => `<section class="draft-group"><h3>${esc(supplier)}</h3>${rows.map(([key,p]) => `<div class="draft-row"><div class="draft-name"><b>${esc(p.item.sku)}</b> · ${esc(p.item.name)}</div><div class="draft-bottom"><strong>${esc(fmt(p.order.quantity))} ${esc(p.item.unit || '')}</strong><button type="button" data-remove="${esc(key)}">Убрать</button></div><p class="muted small" style="margin:8px 0 0">Приёмка: ${esc(dateText(p.order.arrival))} · условный расчёт</p></div>`).join('')}</section>`).join('') : '<div class="empty-state">Черновик пока пуст.<br>Добавьте рассчитанную рекомендацию.</div>';
   $('draft-count').textContent = state.drafts.size || '';
+  if ([...state.drafts.values()].some((plan) => plan.policy?.scenario_mode === 'demonstration')) $('draft').innerHTML = '<p class="badge warning">Черновик содержит демонстрационные сценарии</p>' + $('draft').innerHTML;
   $('export-draft').disabled = !state.drafts.size; $('clear-draft').disabled = !state.drafts.size;
 }
 async function download(path, options, filename) {
@@ -255,6 +295,7 @@ $('policy-form').addEventListener('submit', calculate);
 $('policy-form').addEventListener('input', () => invalidatePlan(true));
 $('policy-form').addEventListener('change', () => invalidatePlan(true));
 $('reset-policy').addEventListener('click', () => resetPolicy(true));
+$('apply-demo').addEventListener('click', applyDemoPreset);
 $('reload').addEventListener('click', () => loadBootstrap(true));
 $('export-draft').addEventListener('click', exportDraft);
 $('clear-draft').addEventListener('click', () => {state.drafts.clear();renderDraft();renderRecommendation();message('Черновик очищен. Исходные данные не изменены.');});
