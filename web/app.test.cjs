@@ -4,13 +4,13 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const nodes = new Map();
 function node(id) {
-  if (!nodes.has(id)) nodes.set(id, { value: '', checked: false, textContent: '', innerHTML: '', hidden: false, disabled: false, dataset: {}, elements: {}, addEventListener() {}, classList: { toggle() {} } });
+  if (!nodes.has(id)) nodes.set(id, { value: '', checked: false, textContent: '', innerHTML: '', hidden: false, disabled: false, dataset: {}, elements: {}, addEventListener() {}, setAttribute() {}, removeAttribute() {}, classList: { toggle() {} } });
   return nodes.get(id);
 }
 const context = vm.createContext({
   console, Intl, AbortController, Map, setTimeout, Number, URL,
   document: { getElementById: node, addEventListener() {}, querySelectorAll: () => [] },
-  window: { addEventListener() {} }, requestAnimationFrame() {},
+  window: { addEventListener() {}, scrollTo() {} }, requestAnimationFrame() {},
 });
 let source = fs.readFileSync(__dirname + '/app.js', 'utf8');
 source = source.replace(/renderDraft\(\); loadBootstrap\(\);\s*$/, '');

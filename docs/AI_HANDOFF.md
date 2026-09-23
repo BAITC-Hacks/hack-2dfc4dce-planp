@@ -1,6 +1,14 @@
 # AI handoff — QORAI, HackAlem Logistics
 
-## Актуально: WEB-MVP-20260923 — release_ready, awaiting Git GO
+## Срез приёмки перед PR, 23.09.2026
+
+- На момент этого checkpoint по подтверждению ведущего основной MVP merged в PR #1, `main` SHA `53aae44`, [Render LIVE](https://qorai.onrender.com) с прежним UI. Новый каталог принят локально; конечный статус следующего release устанавливается отдельно по GitHub/Render.
+- Последний общий pytest: **127 passed in 28.83s, 0 skips, exit 0** на выданном наборе. После последних UI-текста/scroll правок повторены Node syntax check, **18 helper assertions**, **23 catalog checks** — все exit 0. Последний разрешённый diff-check был PASS до финальных правок; повтор и release — после нового GO.
+- Browser QA ведущего: старт без autoselect; 3045 = 2463 IEK + 582 SystemElectric; ATN540126 42/19/23/pack6 совпал с прямым чтением XLSX. L2/H30/SS7/MOQ0, ETA08.10 → Q36 → черновик → CSV передан браузеру. Новый файл на диске не проверен. IEK null, пагинация и пустой поиск корректны, errors `[]`; снимки 04–09 просмотрены PASS. После reload окончательный h1 «Без нового заказа — риск дефицита с 01.10.2026», Q36 и scrollY=0 после явной навигации/расчёта проверены в браузере; ограничения в [QA_REPORT](QA_REPORT.md).
+- Приёмка техническая, не full-case: must-have 1/2/5 partial, 3/4 отсутствуют. Реальный Fable-аудит и поправка после прямого schema-check записаны в [CASE_COMPLIANCE](CASE_COMPLIANCE.md): 8 parsed / 4 hash-only; операции есть, clientID/ежедневной доступности в проверенной схеме нет.
+- Write-set текущего worker: QA_REPORT, E2E_BOT_REGISTRY, PROJECT_STATE, AI_HANDOFF, CHANGELOG_AI — **FROZEN**. README и ALGORITHM прочитаны/одобрены ведущим; release передан logistics_spec_writer. Core/UI не менялись; следующий шаг — отдельное Git GO и final release QA. Сырые данные/outputs/секреты не stage. Mobile NOT VERIFIED, Docker build NOT RUN сохраняются.
+
+## История: WEB-MVP-20260923 — до первой публикации
 
 - Владелец разрешил оставшийся MVP и последующие PR/merge после проверок. Бренд **QORAI — управление запасами**; пакет/repo сохраняют технические имена.
 - Кодовые scope завершены: M — replenishment; UI — web и bootstrap-helper; API/hosting guard — отдельный reviewer/worker; I — интеграция/README/память/release manifest. Параллельные изменения одного файла не выполняются.
